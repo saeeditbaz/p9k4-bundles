@@ -12,6 +12,17 @@ def run(*args):
     return subprocess.check_output(args, text=True).strip()
 
 
+def app_notes(body, app, version_name, app_count):
+    # Mixed releases must explicitly scope notes to each APK.
+    sections = re.split(r"(?m)^## +(vpn|reseller) *$", body or "")
+    for index in range(1, len(sections), 2):
+        if sections[index] == app:
+            return re.split(r"(?m)^## +", sections[index + 1], maxsplit=1)[0].strip()[:5000]
+    if app_count == 1 and len(sections) == 1:
+        return (body or "").strip()[:5000]
+    return f"Version {version_name}"
+
+
 def main():
     repo = os.environ["GITHUB_REPOSITORY"]
     policy = json.loads(os.environ["APK_POLICY"])
@@ -23,6 +34,7 @@ def main():
     sdk = Path(os.environ["ANDROID_HOME"])
     tools = sorted((sdk / "build-tools").glob("*"), key=lambda p: tuple(int(n) for n in re.findall(r"\d+", p.name)))[-1]
     manifest = {"schema_version": 1, "release_id": release["id"], "tag": release["tag_name"], "apps": {}}
+    app_count = sum(any(a["name"] == values[0] and a["state"] == "uploaded" for a in release["assets"]) for values in policy.values())
     with tempfile.TemporaryDirectory() as directory:
         for app, (filename, package, signer) in policy.items():
             if not re.fullmatch(r"[a-z0-9-]+\.apk", filename):
@@ -45,7 +57,7 @@ def main():
             info = re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'", badging)
             if not info or info[1] != package or not 1 <= int(info[2]) <= 2100000000:
                 raise SystemExit("Unexpected package or version")
-            notes = (release.get("body") or "").strip()[:5000]
+            notes = app_notes(release.get("body"), app, info[3], app_count)
             manifest["apps"][app] = {"package_name": package, "version_code": int(info[2]), "version_name": info[3],
                 "asset_id": asset["id"], "sha256": digest, "release_notes": notes}
         if not manifest["apps"]:
