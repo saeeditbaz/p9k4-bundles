@@ -13,6 +13,7 @@ def run(*args):
 
 
 def app_notes(body, app, version_name, app_count):
+    body = (body or "").replace("\r\n", "\n")
     # Mixed releases must explicitly scope notes to each APK.
     sections = re.split(r"(?m)^## +(vpn|reseller) *$", body or "")
     for index in range(1, len(sections), 2):
